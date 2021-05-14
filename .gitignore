@@ -1,0 +1,12 @@
+GCC/
+
+# Generated Libraries
+/liblikwid*.so*
+/ext/hwloc/liblikwid-hwloc.so
+/ext/lua/liblikwid-lua.so
+
+# Generated Executables
+/likwid-*
+/bench/likwid-bench
+/ext/lua/lua
+/test/test-topology-gpu-rocm
