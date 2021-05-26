@@ -9,4 +9,8 @@ GCC/
 /likwid-*
 /bench/likwid-bench
 /ext/lua/lua
-/test/test-topology-gpu-rocm
+/test/*
+!/test/*.*
+!/test/Makefile
+
+/likwid.lua
