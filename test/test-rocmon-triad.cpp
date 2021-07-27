@@ -125,22 +125,24 @@ int main(int argc, char **argv) {
   int gpuIds[1] = {deviceId}; 
   if (rocmon_init(1, gpuIds) < 0)
   {
-      printf("Failed to initialie Rocmon\n");
+      printf("Failed to initialize Rocmon\n");
       return -1;
   }
+
+  EventList_rocm_t* list;
+  if (rocmon_getEventsOfGpu(deviceId, &list) < 0)
+  {
+    printf("Failed to fetch event list\n");
+    return -1;
+  }
+  for (int i = 0; i < list->numEvents; i++)
+  {
+    printf("-- %s [%d]\n", list->events[i].name, list->events[i].instances);
+  }
+  rocmon_freeEventsOfGpu(list);
+
   int gid = -1;
-  // if (rocmon_addEventSet("GRBM_COUNT:_,GRBM_GUI_ACTIVE:_,GPUBusy:_", &gid) < 0 || gid < 0)
-  // if (rocmon_addEventSet(
-  //   // "TCC_HIT[0]:_,TCC_HIT[1]:_,TCC_HIT[2]:_,TCC_HIT[3]:_,TCC_HIT[4]:_,TCC_HIT[5]:_,TCC_HIT[6]:_,TCC_HIT[7]:_,TCC_HIT[8]:_,TCC_HIT[9]:_,TCC_HIT[10]:_,TCC_HIT[11]:_,TCC_HIT[12]:_,TCC_HIT[13]:_,TCC_HIT[14]:_,TCC_HIT[15]:_"
-  //   // ",TCC_MISS[0]:_,TCC_MISS[1]:_,TCC_MISS[2]:_,TCC_MISS[3]:_,TCC_MISS[4]:_,TCC_MISS[5]:_,TCC_MISS[6]:_,TCC_MISS[7]:_,TCC_MISS[8]:_,TCC_MISS[9]:_,TCC_MISS[10]:_,TCC_MISS[11]:_,TCC_MISS[12]:_,TCC_MISS[13]:_,TCC_MISS[14]:_,TCC_MISS[15]:_"
-  //   // ",TA_FLAT_WRITE_WAVEFRONTS[0]:_,TA_FLAT_WRITE_WAVEFRONTS[1]:_,TA_FLAT_WRITE_WAVEFRONTS[2]:_,TA_FLAT_WRITE_WAVEFRONTS[3]:_,TA_FLAT_WRITE_WAVEFRONTS[4]:_,TA_FLAT_WRITE_WAVEFRONTS[5]:_,TA_FLAT_WRITE_WAVEFRONTS[6]:_,TA_FLAT_WRITE_WAVEFRONTS[7]:_,TA_FLAT_WRITE_WAVEFRONTS[8]:_,TA_FLAT_WRITE_WAVEFRONTS[9]:_,TA_FLAT_WRITE_WAVEFRONTS[10]:_,TA_FLAT_WRITE_WAVEFRONTS[11]:_,TA_FLAT_WRITE_WAVEFRONTS[12]:_,TA_FLAT_WRITE_WAVEFRONTS[13]:_,TA_FLAT_WRITE_WAVEFRONTS[14]:_,TA_FLAT_WRITE_WAVEFRONTS[15]:_"
-  //   // "SQ_WAVES:_,SQ_INSTS_VALU:_,SQ_INSTS_VMEM_WR:_,SQ_INSTS_VMEM_RD:_,SQ_INSTS_SALU:_"
-  //   // "SQ_INSTS_SMEM:_,SQ_INSTS_FLAT:_,SQ_INSTS_FLAT_LDS_ONLY:_,SQ_INSTS_LDS:_,SQ_INSTS_GDS:_"
-  //   ,&gid) < 0 || gid < 0)
-  // if (rocmon_addEventSet("GRBM_GUI_ACTIVE:_,GRBM_COUNT:_,GPUBusy:_", &gid) < 0 || gid < 0)
-  if (rocmon_addEventSet("GRBM_GUI_ACTIVE:_,GRBM_COUNT:_,TCC_HIT_sum:_", &gid) < 0 || gid < 0)
-  // if (rocmon_addEventSet("GRBM_GUI_ACTIVE:_,GRBM_COUNT:_,TCC_HIT_sum:_,GPUBusy:_", &gid) < 0 || gid < 0)
-  // if (rocmon_addEventSet("GRBM_GUI_ACTIVE:_,GRBM_COUNT:_,TCC_HIT_sum:_,GPUBusy:_,VALUInsts:_,VALUUtilization:_,LDSBankConflict:_,Wavefronts:_,FETCH_SIZE:_", &gid) < 0 || gid < 0)
+  if (rocmon_addEventSet("RSMI_POWER_AVE[0]:_,RSMI_VOLT_VDDGFX:_", &gid) < 0 || gid < 0)
   {
       printf("Failed to add event set\n");
       return -1;

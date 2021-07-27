@@ -209,6 +209,15 @@ nvmon_init(int nrGpus, const int* gpuIds)
         }
     }
 
+    ret = nvml_init();
+    if (ret < 0)
+    {
+        free(nvGroupSet->gpus);
+        free(nvGroupSet);
+        nvGroupSet = NULL;
+        return ret;
+    }
+
     nvmon_initialized = 1;
     return 0;
 }
@@ -220,6 +229,7 @@ nvmon_finalize(void)
 {
     if (nvmon_initialized && nvGroupSet)
     {
+        nvml_finalize();
         for (int i = 0; i < nvGroupSet->numberOfGPUs; i++)
         {
             NvmonDevice_t device = &nvGroupSet->gpus[i];
@@ -339,6 +349,70 @@ void nvmon_returnEventsOfGpu(NvmonEventList_t list)
 }
 
 
+static int
+nvmon_splitEventSet(GroupInfo* backendEvents, GroupInfo* nvmlEvents, int gpuId, GroupInfo* input)
+{
+    int ret;
+
+    // Get list of nvml events for sorting
+    NvmonEventList_t nvmlList;
+    nvml_getEventsOfGpu(gpuId, &nvmlList);
+
+    // Initialize groups
+    perfgroup_new(backendEvents);
+    perfgroup_new(nvmlEvents);
+
+    // Sort events (shallow copy)
+    for (int i = 0; i < input->nevents; i++)
+    {
+        // Check if event is in nvml list
+        int isNvmlEvent = 0;
+        for (int j = 0; j < nvmlList->numEvents; j++)
+        {
+            if (strcmp(input->events[i], nvmlList->events[j].name) == 0)
+            {
+                isNvmlEvent = 1;
+                break;
+            }
+        }
+        if (isNvmlEvent)
+        {
+            ret = perfgroup_addEvent(nvmlEvents, input->counters[i], input->events[i]);
+            if (ret < 0)
+            {
+                ERROR_PRINT(Failed to add event while splitting);
+                return ret;
+            }
+        }
+        else
+        {
+            ret = perfgroup_addEvent(backendEvents, input->counters[i], input->events[i]);
+            if (ret < 0)
+            {
+                ERROR_PRINT(Failed to add event while splitting);
+                return ret;
+            }
+        }
+    }
+
+    nvml_returnEventsOfGpu(nvmlList);
+    return 0;
+}
+
+
+static void
+nvmon_returnSplitEventSet(GroupInfo* backendEvents, GroupInfo* nvmlEvents)
+{
+    if (backendEvents != NULL)
+    {
+        perfgroup_returnGroup(backendEvents);
+    }
+    if (nvmlEvents != NULL)
+    {
+        perfgroup_returnGroup(nvmlEvents);
+    }
+}
+
 
 int
 nvmon_addEventSet(const char* eventCString)
@@ -442,34 +516,73 @@ nvmon_addEventSet(const char* eventCString)
         }
         isPerfGroup = 1;
     }
+
+    // Split events into nvml and backend events
+    GroupInfo backendEvents;
+    GroupInfo nvmlEvents;
+    err = nvmon_splitEventSet(&backendEvents, &nvmlEvents, nvGroupSet->gpus[0].deviceId, &nvGroupSet->groups[nvGroupSet->numberOfGroups-1]); // it is assumed that all gpus split the same
+    if (err < 0)
+    {
+        ERROR_PRINT(Failed to split events);
+        return -1;
+    }
+
+    // Add nvml events
+    err = nvml_addEventSet(nvmlEvents.events, nvmlEvents.nevents);
+    if (err < 0)
+    {
+        ERROR_PRINT(Failed to add nvml events);
+        return -1;
+    }
+
     bdestroy(eventBString);
-    char * evstr = perfgroup_getEventStr(&nvGroupSet->groups[nvGroupSet->numberOfGroups-1]);
+    char * evstr = perfgroup_getEventStr(&backendEvents);
 /*    eventBString = bfromcstr(evstr);*/
     GPUDEBUG_PRINT(DEBUGLEV_DEVELOP, EventStr %s, evstr);
 /*    eventtokens = bsplit(eventBString, ',');*/
 /*    bdestroy(eventBString);*/
 
+    // Event string is null when there are no events for backend
     for (devId = 0; devId < nvGroupSet->numberOfGPUs; devId++)
     {
-        int err = 0;
         device = &nvGroupSet->gpus[devId];
-        NvmonFunctions* funcs = nvGroupSet->backends[device->backend];
-        if (!funcs)
+        if (evstr != NULL)
         {
-            ERROR_PRINT(Backend functions undefined?);
-        }
-        if (funcs->addEvents)
-        {
-            GPUDEBUG_PRINT(DEBUGLEV_DEVELOP, Calling addevents);
-            err = funcs->addEvents(device, evstr);
-            if (err < 0)
+            int err = 0;
+            NvmonFunctions* funcs = nvGroupSet->backends[device->backend];
+            if (!funcs)
             {
-                errno = -err;
-                ERROR_PRINT(Failed to add event set for GPU %d, devId);
-                return err;
+                ERROR_PRINT(Backend functions undefined?);
             }
+            if (funcs->addEvents)
+            {
+                GPUDEBUG_PRINT(DEBUGLEV_DEVELOP, Calling addevents);
+                err = funcs->addEvents(device, evstr);
+                if (err < 0)
+                {
+                    errno = -err;
+                    ERROR_PRINT(Failed to add event set for GPU %d, devId);
+                    return err;
+                }
+            }
+        }   
+        else
+        {
+            // Add empty event set 
+            NvmonEventSet* tmpEventSet = realloc(device->nvEventSets, (device->numNvEventSets+1)*sizeof(NvmonEventSet));
+            if (!tmpEventSet)
+            {
+                ERROR_PRINT(Cannot enlarge GPU %d eventSet list, device->deviceId);
+                return -ENOMEM;
+            }
+            device->nvEventSets = tmpEventSet;
+            NvmonEventSet* newEventSet = &device->nvEventSets[device->numNvEventSets];
+            memset(newEventSet, 0, sizeof(NvmonEventSet));
         }
     }
+
+    // Cleanup
+    nvmon_returnSplitEventSet(&backendEvents, &nvmlEvents);
 
     // Check whether group has any event in any device
     nvGroupSet->numberOfActiveGroups++;
@@ -498,11 +611,12 @@ int nvmon_setupCounters(int gid)
             NvmonEventSet* devEventSet = &device->nvEventSets[gid];
 
             NvmonFunctions* funcs = nvGroupSet->backends[device->backend];
-            if (funcs->setupCounters)
+            if (devEventSet->numberOfEvents > 0 && funcs->setupCounters)
             {
                 err = funcs->setupCounters(device, devEventSet);
             }
         }
+        nvml_setupCounters(gid);
     }
     nvGroupSet->activeGroup = gid;
 
@@ -523,14 +637,20 @@ nvmon_startCounters(void)
     for (i = 0; i < nvGroupSet->numberOfGPUs; i++)
     {
         NvmonDevice_t device = &nvGroupSet->gpus[i];
+        NvmonEventSet* devEventSet = &device->nvEventSets[nvGroupSet->activeGroup];
         NvmonFunctions* funcs = nvGroupSet->backends[device->backend];
-        if (funcs->startCounters)
+        if (devEventSet->numberOfEvents > 0 && funcs->startCounters)
         {
             err = funcs->startCounters(device);
+            if (err < 0) return err;
         }
     }
 
-    return err;
+    // Start nvml counters
+    err = nvml_startCounters();
+    if (err < 0) return err;
+
+    return 0;
 }
 
 int
@@ -546,12 +666,18 @@ nvmon_stopCounters(void)
     for (i = 0; i < nvGroupSet->numberOfGPUs; i++)
     {
         NvmonDevice_t device = &nvGroupSet->gpus[i];
+        NvmonEventSet* devEventSet = &device->nvEventSets[nvGroupSet->activeGroup];
         NvmonFunctions* funcs = nvGroupSet->backends[device->backend];
-        if (funcs->stopCounters)
+        if (devEventSet->numberOfEvents > 0 && funcs->stopCounters)
         {
             err = funcs->stopCounters(device);
+            if (err < 0) return err;
         }
     }
+
+    // Stop nvml counters
+    err = nvml_stopCounters();
+    if (err < 0) return err;
 
     return 0;
 }
@@ -569,13 +695,19 @@ int nvmon_readCounters(void)
     for (i = 0; i < nvGroupSet->numberOfGPUs; i++)
     {
         NvmonDevice_t device = &nvGroupSet->gpus[i];
+        NvmonEventSet* devEventSet = &device->nvEventSets[nvGroupSet->activeGroup];
         NvmonFunctions* funcs = nvGroupSet->backends[device->backend];
-        if (funcs->readCounters)
+        if (devEventSet->numberOfEvents > 0 && funcs->readCounters)
         {
             err = funcs->readCounters(device);
+            if (err < 0) return err;
         }
-
     }
+    
+    // Read nvml counters
+    err = nvml_readCounters();
+    if (err < 0) return err;
+
     return 0;
 }
 
@@ -589,17 +721,36 @@ double nvmon_getResult(int groupId, int eventId, int gpuId)
     {
         return -EFAULT;
     }
-    NvmonDevice *device = &nvGroupSet->gpus[gpuId];
-    if (groupId < 0 || groupId >= device->numNvEventSets)
+
+    // Event ids are partitioned as follows: backendEvents...,nvmlEvents...
+    int numNvmlEvents = nvml_getNumberOfEvents(groupId);
+    int numTotalEvents = nvmon_getNumberOfEvents(groupId);
+
+    if (numNvmlEvents < 0) return numNvmlEvents;
+    if (numTotalEvents < 0) return numTotalEvents;
+
+    // Calculate number of backend events
+    int numBackendEvents = numTotalEvents - numNvmlEvents;
+
+    // Get value from respective source
+    if (eventId < numBackendEvents)
     {
-        return -EFAULT;
+        NvmonDevice *device = &nvGroupSet->gpus[gpuId];
+        if (groupId < 0 || groupId >= device->numNvEventSets)
+        {
+            return -EFAULT;
+        }
+        NvmonEventSet* evset = &device->nvEventSets[groupId];
+        if (eventId < 0 || eventId >= evset->numberOfEvents)
+        {
+            return -EFAULT;
+        }
+        return evset->results[eventId].fullValue;
     }
-    NvmonEventSet* evset = &device->nvEventSets[groupId];
-    if (eventId < 0 || eventId >= evset->numberOfEvents)
+    else
     {
-        return -EFAULT;
+        return nvml_getLastResult(gpuId, groupId, eventId - numBackendEvents);
     }
-    return evset->results[eventId].fullValue;
 }
 
 
@@ -622,17 +773,36 @@ double nvmon_getLastResult(int groupId, int eventId, int gpuId)
     {
         return -EFAULT;
     }
-    NvmonDevice *device = &nvGroupSet->gpus[gpuId];
-    if (groupId < 0 || groupId >= device->numNvEventSets)
+
+    // Event ids are partitioned as follows: backendEvents...,nvmlEvents...
+    int numNvmlEvents = nvml_getNumberOfEvents(groupId);
+    int numTotalEvents = nvmon_getNumberOfEvents(groupId);
+
+    if (numNvmlEvents < 0) return numNvmlEvents;
+    if (numTotalEvents < 0) return numTotalEvents;
+
+    // Calculate number of backend events
+    int numBackendEvents = numTotalEvents - numNvmlEvents;
+
+    // Get value from respective source
+    if (eventId < numBackendEvents)
     {
-        return -EFAULT;
+        NvmonDevice *device = &nvGroupSet->gpus[gpuId];
+        if (groupId < 0 || groupId >= device->numNvEventSets)
+        {
+            return -EFAULT;
+        }
+        NvmonEventSet* evset = &device->nvEventSets[groupId];
+        if (eventId < 0 || eventId >= evset->numberOfEvents)
+        {
+            return -EFAULT;
+        }
+        return evset->results[eventId].lastValue;
     }
-    NvmonEventSet* evset = &device->nvEventSets[groupId];
-    if (eventId < 0 || eventId >= evset->numberOfEvents)
+    else
     {
-        return -EFAULT;
+        return nvml_getLastResult(gpuId, groupId, eventId - numBackendEvents);
     }
-    return evset->results[eventId].lastValue;
 }
 
 

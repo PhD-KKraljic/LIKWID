@@ -30,9 +30,20 @@
 #ifndef LIKWID_NVMON_NVML_H
 #define LIKWID_NVMON_NVML_H
 
+#include <nvmon_types.h>
 
-
-
+int nvml_init();
+void nvml_finalize();
+int nvml_getEventsOfGpu(int gpuId, NvmonEventList_t* output);
+void nvml_returnEventsOfGpu(NvmonEventList_t list);
+int nvml_addEventSet(char** events, int numEvents);
+int nvml_setupCounters(int gid);
+int nvml_startCounters();
+int nvml_stopCounters();
+int nvml_readCounters();
+int nvml_getNumberOfEvents(int groupId);
+int nvml_getResult(int gpuIdx, int groupId, int eventId);
+int nvml_getLastResult(int gpuIdx, int groupId, int eventId);
 
 
 NvmonFunctions nvmon_nvml_functions = {

@@ -11,7 +11,7 @@
 COMPILER = GCC#NO SPACE
 
 # Path were to install likwid
-PREFIX ?= /usr/local#NO SPACE
+PREFIX ?= /home/users/kraljic/likwid-rocmon/install#NO SPACE
 
 # Set the default mode for MSR access.
 # This can usually be overriden on the commandline.
@@ -28,7 +28,7 @@ INSTRUMENT_BENCH = true#NO SPACE
 
 # Build LIKWID with NVIDIA interface (CUDA, CUPTI)
 # For configuring include paths, go to CUDA section
-NVIDIA_INTERFACE = false#NO SPACE
+NVIDIA_INTERFACE = true#NO SPACE
 
 # Build LIKWID with AMD GPU interface (ROCm)
 # For configuring include paths, go to ROCm section
@@ -85,7 +85,7 @@ INSTALLED_APPDAEMON = $(INSTALLED_PREFIX)/lib/likwid-appDaemon.so#NO SPACE
 # chown installed tools to this user/group
 # if you change anything here, make sure that the user/group can access
 # the MSR devices and (on Intel) the PCI devices.
-INSTALL_CHOWN = -g root -o root#NO SPACE
+INSTALL_CHOWN = -o kraljic#NO SPACE
 
 # uncomment to optionally set external lua@5.2 or lua@5.3:
 # default is use internally provide lua
@@ -180,6 +180,6 @@ BUILDAPPDAEMON=false
 # ROCM_INTERFACE=true. At runtime, the ROCm library have
 # to be in the LD_LIBRARY_PATH to dynamically load the libraries.
 # Include directory for ROCm headers
-HSAINCLUDE 			= $(ROCM_HOME)/hsa/include
+HSAINCLUDE 			= /home/users/kraljic/likwid-rocmon/hsa#$(ROCM_HOME)/hsa/include
 ROCPROFILERINCLUDE	= $(ROCM_HOME)/rocprofiler/include
 HIPINCLUDE 			= $(ROCM_HOME)/hip/include
