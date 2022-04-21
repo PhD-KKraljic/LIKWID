@@ -268,7 +268,7 @@ else
     end
 end
 
-if likwid.nvSupported() then
+if likwid.gpuSupported() then
     gputopo = likwid.getGpuTopology()
     if gputopo then
         table.insert(output_csv, likwid.sline)

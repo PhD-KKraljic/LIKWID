@@ -89,6 +89,7 @@ topo_get_numDevices(void)
     hipError_t err = (*hipGetDeviceCountTopoPtr)(&count);
     if (err == hipErrorNoDevice)
     {
+	printf("Encountered an error. Count: %i\n", count);
         return 0;
     }
 
@@ -266,8 +267,10 @@ get_gpuTopology_rocm(void)
 {
     if (topo_gpu_initialized)
     {
+	printf("Topo initialized.\n");
         return &topo_gpuTopology;
     }
+    printf("topo not intialized. Did not do anything.\n");
 }
 
 #endif /* LIKWID_WITH_ROCMON */

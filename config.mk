@@ -11,12 +11,12 @@
 COMPILER = GCC#NO SPACE
 
 # Path were to install likwid
-PREFIX ?= /usr/local#NO SPACE
+PREFIX ?= /var/tmp/likwid-kk#NO SPACE
 
 # Set the default mode for MSR access.
 # This can usually be overriden on the commandline.
 # Valid values are: direct, accessdaemon and perf_event
-ACCESSMODE = accessdaemon#NO SPACE
+ACCESSMODE = perf_event#NO SPACE
 
 # Build Fortran90 module interface for Marker API. Adopt Fortran compiler
 # in ./make/include_<COMPILER>.mk if necessary. Default: ifort (even for
@@ -32,7 +32,7 @@ NVIDIA_INTERFACE = false#NO SPACE
 
 # Build LIKWID with AMD GPU interface (ROCm)
 # For configuring include paths, go to ROCm section
-ROCM_INTERFACE = false#NO SPACE
+ROCM_INTERFACE = true#NO SPACE
 
 #################################################################
 #################################################################
@@ -180,7 +180,7 @@ BUILDAPPDAEMON=false
 # ROCM_INTERFACE=true. At runtime, the ROCm library have
 # to be in the LD_LIBRARY_PATH to dynamically load the libraries.
 # Include directory for ROCm headers
-HSAINCLUDE 			= $(ROCM_HOME)/hsa/include
+HSAINCLUDE 			= /storage/users/kraljic/_eingangshalle/Master-Repo/utils/hsa
 ROCPROFILERINCLUDE	= $(ROCM_HOME)/rocprofiler/include
 HIPINCLUDE 			= $(ROCM_HOME)/hip/include
 RSMIINCLUDE			= $(ROCM_HOME)/rocm_smi/include

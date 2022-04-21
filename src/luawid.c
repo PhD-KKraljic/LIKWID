@@ -2902,6 +2902,292 @@ lua_likwid_setresuser(lua_State* L)
 
 #ifdef LIKWID_WITH_NVMON
 
+
+static int
+lua_likwid_nvGetNameOfEvent(lua_State* L)
+{
+    int eventId, groupId;
+    char* tmp;
+    if (nvmon_initialized == 0)
+    {
+        return 0;
+    }
+    groupId = lua_tonumber(L,1);
+    eventId = lua_tonumber(L,2);
+    tmp = nvmon_getEventName(groupId-1, eventId-1);
+    lua_pushstring(L,tmp);
+    return 1;
+}
+
+static int
+lua_likwid_nvGetNameOfCounter(lua_State* L)
+{
+    int eventId, groupId;
+    char* tmp;
+    if (nvmon_initialized == 0)
+    {
+        return 0;
+    }
+    groupId = lua_tonumber(L,1);
+    eventId = lua_tonumber(L,2);
+    tmp = nvmon_getCounterName(groupId-1, eventId-1);
+    lua_pushstring(L,tmp);
+    return 1;
+}
+
+
+static int
+lua_likwid_nvGetNameOfMetric(lua_State* L)
+{
+    int metricId, groupId;
+    char* tmp;
+    if (nvmon_initialized == 0)
+    {
+        return 0;
+    }
+    groupId = lua_tonumber(L,1);
+    metricId = lua_tonumber(L,2);
+    tmp = nvmon_getMetricName(groupId-1, metricId-1);
+    lua_pushstring(L,tmp);
+    return 1;
+}
+
+static int
+lua_likwid_nvGetNameOfGroup(lua_State* L)
+{
+    int groupId;
+    char* tmp;
+    if (nvmon_initialized == 0)
+    {
+        return 0;
+    }
+    groupId = lua_tonumber(L,1);
+    tmp = nvmon_getGroupName(groupId-1);
+    lua_pushstring(L,tmp);
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerFile_read(lua_State* L)
+{
+    const char* filename = (const char*)luaL_checkstring(L, -1);
+    int ret = nvmon_readMarkerFile(filename);
+    lua_pushinteger(L, ret);
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerFile_destroy(lua_State* L)
+{
+    nvmon_destroyMarkerResults();
+    return 0;
+}
+
+static int
+lua_likwid_nvMarkerNumRegions(lua_State* L)
+{
+    lua_pushinteger(L, nvmon_getNumberOfRegions());
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerRegionGroup(lua_State* L)
+{
+    int region = lua_tointeger(L,-1);
+    lua_pushinteger(L, nvmon_getGroupOfRegion(region-1)+1);
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerRegionTag(lua_State* L)
+{
+    int region = lua_tointeger(L,-1);
+    lua_pushstring(L, nvmon_getTagOfRegion(region-1));
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerRegionEvents(lua_State* L)
+{
+    int region = lua_tointeger(L,-1);
+    lua_pushinteger(L, nvmon_getEventsOfRegion(region-1));
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerRegionMetrics(lua_State* L)
+{
+    int region = lua_tointeger(L,-1);
+    lua_pushinteger(L, nvmon_getMetricsOfRegion(region-1));
+    return 1;
+}
+
+
+static int
+lua_likwid_nvMarkerRegionGpus(lua_State* L)
+{
+    int region = lua_tointeger(L,-1);
+    lua_pushinteger(L, nvmon_getGpusOfRegion(region-1));
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerRegionGpulist(lua_State* L)
+{
+    int i = 0;
+    int region = lua_tointeger(L,-1);
+    int* gpulist;
+    int regionGPUs = 0;
+    if (gputopology_isInitialized == 0)
+    {
+        topology_gpu_init();
+    }
+    if ((gputopology_isInitialized) && (gputopo == NULL))
+    {
+        gputopo = get_gpuTopology();
+    }
+
+    gpulist = (int*)malloc(gputopo->numDevices * sizeof(int));
+    if (gpulist == NULL)
+    {
+        return 0;
+    }
+    regionGPUs = nvmon_getGpulistOfRegion(region-1, gputopo->numDevices, gpulist);
+    if (regionGPUs > 0)
+    {
+        lua_newtable(L);
+        for (i=0; i < regionGPUs; i++)
+        {
+            lua_pushinteger(L, i+1);
+            lua_pushinteger(L, gpulist[i]);
+            lua_settable(L, -3);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+static int
+lua_likwid_nvMarkerRegionTime(lua_State* L)
+{
+    int region = lua_tointeger(L,-2);
+    int thread = lua_tointeger(L,-1);
+    lua_pushnumber(L, nvmon_getTimeOfRegion(region-1, thread-1));
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerRegionCount(lua_State* L)
+{
+    int region = lua_tointeger(L,-2);
+    int thread = lua_tointeger(L,-1);
+    lua_pushinteger(L, nvmon_getCountOfRegion(region-1, thread-1));
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerRegionResult(lua_State* L)
+{
+    int region = lua_tointeger(L,-3);
+    int event = lua_tointeger(L,-2);
+    int gpu = lua_tointeger(L,-1);
+    lua_pushnumber(L, nvmon_getResultOfRegionGpu(region-1, event-1, gpu-1));
+    return 1;
+}
+
+static int
+lua_likwid_nvMarkerRegionMetric(lua_State* L)
+{
+    int region = lua_tointeger(L,-3);
+    int metric = lua_tointeger(L,-2);
+    int gpu = lua_tointeger(L,-1);
+    lua_pushnumber(L, nvmon_getMetricOfRegionGpu(region-1, metric-1, gpu-1));
+    return 1;
+}
+
+
+static int
+lua_likwid_nvInit(lua_State* L)
+{
+    int ret;
+    int nrGpus = luaL_checknumber(L,1);
+    luaL_argcheck(L, nrGpus > 0, 1, "GPU count must be greater than 0");
+    int gpus[nrGpus];
+    if (!lua_istable(L, -1)) {
+      lua_pushstring(L,"No table given as second argument");
+      lua_error(L);
+    }
+    for (ret = 1; ret<=nrGpus; ret++)
+    {
+        lua_rawgeti(L,-1,ret);
+	#if LUA_VERSION_NUM == 501
+        	gpus[ret-1] = ((lua_Integer)lua_tointeger(L,-1));
+	#else
+        	gpus[ret-1] = ((lua_Unsigned)lua_tointegerx(L,-1, NULL));
+	#endif
+        lua_pop(L,1);
+    }
+    if (gputopology_isInitialized == 0)
+    {
+        topology_gpu_init();
+    }
+    if ((gputopology_isInitialized) && (gputopo == NULL))
+    {
+        gputopo = get_gpuTopology();
+    }
+    if (nvmon_initialized == 0)
+    {
+        ret = nvmon_init(nrGpus, gpus);
+        if (ret != 0)
+        {
+            lua_pushstring(L,"Cannot initialize likwid perfmon");
+            nvmon_finalize();
+            lua_pushinteger(L,ret);
+            return 1;
+        }
+        nvmon_initialized = 1;
+        lua_pushinteger(L,ret);
+    }
+    return 1;
+}
+
+static int
+lua_likwid_nvAddEventSet(lua_State* L)
+{
+    int groupId, n;
+    const char* tmpString;
+    if (nvmon_initialized == 0)
+    {
+        return 0;
+    }
+    n = lua_gettop(L);
+    tmpString = luaL_checkstring(L, n);
+    luaL_argcheck(L, strlen(tmpString) > 0, n, "Event string must be larger than 0");
+
+    groupId = nvmon_addEventSet((char*)tmpString);
+    if (groupId >= 0)
+        lua_pushinteger(L, groupId+1);
+    else
+        lua_pushinteger(L, groupId);
+    return 1;
+}
+
+static int
+lua_likwid_nvFinalize(lua_State *L)
+{
+    if (nvmon_initialized)
+        nvmon_finalize();
+    return 0;
+}
+#endif /* LIKWID_WITH_NVMON */
+
+#if defined(LIKWID_WITH_ROCMON) || defined(LIKWID_WITH_NVMON)
+static int
+lua_likwid_gpuSupported(lua_State *L)
+{
+    lua_pushboolean(L, 1);
+    return 1;
+}
 GpuTopology_t gputopo = NULL;
 
 static int
@@ -3123,6 +3409,7 @@ lua_likwid_getGpuEventsAndCounters(lua_State* L)
     lua_pushstring(L,"numDevices");
     lua_pushinteger(L, (lua_Integer)(gputopo->numDevices));
     lua_settable(L,-3);
+    printf("Number of devices: %i", (lua_Integer)(gputopo->numDevices));
 
     lua_pushstring(L,"devices");
     lua_newtable(L);
@@ -3208,297 +3495,14 @@ lua_likwid_getGpuGroups(lua_State* L)
 }
 
 
-static int
-lua_likwid_nvGetNameOfEvent(lua_State* L)
-{
-    int eventId, groupId;
-    char* tmp;
-    if (nvmon_initialized == 0)
-    {
-        return 0;
-    }
-    groupId = lua_tonumber(L,1);
-    eventId = lua_tonumber(L,2);
-    tmp = nvmon_getEventName(groupId-1, eventId-1);
-    lua_pushstring(L,tmp);
-    return 1;
-}
-
-static int
-lua_likwid_nvGetNameOfCounter(lua_State* L)
-{
-    int eventId, groupId;
-    char* tmp;
-    if (nvmon_initialized == 0)
-    {
-        return 0;
-    }
-    groupId = lua_tonumber(L,1);
-    eventId = lua_tonumber(L,2);
-    tmp = nvmon_getCounterName(groupId-1, eventId-1);
-    lua_pushstring(L,tmp);
-    return 1;
-}
-
-
-static int
-lua_likwid_nvGetNameOfMetric(lua_State* L)
-{
-    int metricId, groupId;
-    char* tmp;
-    if (nvmon_initialized == 0)
-    {
-        return 0;
-    }
-    groupId = lua_tonumber(L,1);
-    metricId = lua_tonumber(L,2);
-    tmp = nvmon_getMetricName(groupId-1, metricId-1);
-    lua_pushstring(L,tmp);
-    return 1;
-}
-
-static int
-lua_likwid_nvGetNameOfGroup(lua_State* L)
-{
-    int groupId;
-    char* tmp;
-    if (nvmon_initialized == 0)
-    {
-        return 0;
-    }
-    groupId = lua_tonumber(L,1);
-    tmp = nvmon_getGroupName(groupId-1);
-    lua_pushstring(L,tmp);
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerFile_read(lua_State* L)
-{
-    const char* filename = (const char*)luaL_checkstring(L, -1);
-    int ret = nvmon_readMarkerFile(filename);
-    lua_pushinteger(L, ret);
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerFile_destroy(lua_State* L)
-{
-    nvmon_destroyMarkerResults();
-    return 0;
-}
-
-static int
-lua_likwid_nvMarkerNumRegions(lua_State* L)
-{
-    lua_pushinteger(L, nvmon_getNumberOfRegions());
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerRegionGroup(lua_State* L)
-{
-    int region = lua_tointeger(L,-1);
-    lua_pushinteger(L, nvmon_getGroupOfRegion(region-1)+1);
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerRegionTag(lua_State* L)
-{
-    int region = lua_tointeger(L,-1);
-    lua_pushstring(L, nvmon_getTagOfRegion(region-1));
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerRegionEvents(lua_State* L)
-{
-    int region = lua_tointeger(L,-1);
-    lua_pushinteger(L, nvmon_getEventsOfRegion(region-1));
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerRegionMetrics(lua_State* L)
-{
-    int region = lua_tointeger(L,-1);
-    lua_pushinteger(L, nvmon_getMetricsOfRegion(region-1));
-    return 1;
-}
-
-
-static int
-lua_likwid_nvMarkerRegionGpus(lua_State* L)
-{
-    int region = lua_tointeger(L,-1);
-    lua_pushinteger(L, nvmon_getGpusOfRegion(region-1));
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerRegionGpulist(lua_State* L)
-{
-    int i = 0;
-    int region = lua_tointeger(L,-1);
-    int* gpulist;
-    int regionGPUs = 0;
-    if (gputopology_isInitialized == 0)
-    {
-        topology_gpu_init();
-    }
-    if ((gputopology_isInitialized) && (gputopo == NULL))
-    {
-        gputopo = get_gpuTopology();
-    }
-
-    gpulist = (int*)malloc(gputopo->numDevices * sizeof(int));
-    if (gpulist == NULL)
-    {
-        return 0;
-    }
-    regionGPUs = nvmon_getGpulistOfRegion(region-1, gputopo->numDevices, gpulist);
-    if (regionGPUs > 0)
-    {
-        lua_newtable(L);
-        for (i=0; i < regionGPUs; i++)
-        {
-            lua_pushinteger(L, i+1);
-            lua_pushinteger(L, gpulist[i]);
-            lua_settable(L, -3);
-        }
-        return 1;
-    }
-    return 0;
-}
-
-static int
-lua_likwid_nvMarkerRegionTime(lua_State* L)
-{
-    int region = lua_tointeger(L,-2);
-    int thread = lua_tointeger(L,-1);
-    lua_pushnumber(L, nvmon_getTimeOfRegion(region-1, thread-1));
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerRegionCount(lua_State* L)
-{
-    int region = lua_tointeger(L,-2);
-    int thread = lua_tointeger(L,-1);
-    lua_pushinteger(L, nvmon_getCountOfRegion(region-1, thread-1));
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerRegionResult(lua_State* L)
-{
-    int region = lua_tointeger(L,-3);
-    int event = lua_tointeger(L,-2);
-    int gpu = lua_tointeger(L,-1);
-    lua_pushnumber(L, nvmon_getResultOfRegionGpu(region-1, event-1, gpu-1));
-    return 1;
-}
-
-static int
-lua_likwid_nvMarkerRegionMetric(lua_State* L)
-{
-    int region = lua_tointeger(L,-3);
-    int metric = lua_tointeger(L,-2);
-    int gpu = lua_tointeger(L,-1);
-    lua_pushnumber(L, nvmon_getMetricOfRegionGpu(region-1, metric-1, gpu-1));
-    return 1;
-}
-
-
-static int
-lua_likwid_nvInit(lua_State* L)
-{
-    int ret;
-    int nrGpus = luaL_checknumber(L,1);
-    luaL_argcheck(L, nrGpus > 0, 1, "GPU count must be greater than 0");
-    int gpus[nrGpus];
-    if (!lua_istable(L, -1)) {
-      lua_pushstring(L,"No table given as second argument");
-      lua_error(L);
-    }
-    for (ret = 1; ret<=nrGpus; ret++)
-    {
-        lua_rawgeti(L,-1,ret);
-#if LUA_VERSION_NUM == 501
-        gpus[ret-1] = ((lua_Integer)lua_tointeger(L,-1));
 #else
-        gpus[ret-1] = ((lua_Unsigned)lua_tointegerx(L,-1, NULL));
+static int
+lua_likwid_gpuSupported(lua_State *L)
+{
+    lua_pushboolean(L, 1);
+    return 1;
+}
 #endif
-        lua_pop(L,1);
-    }
-    if (gputopology_isInitialized == 0)
-    {
-        topology_gpu_init();
-    }
-    if ((gputopology_isInitialized) && (gputopo == NULL))
-    {
-        gputopo = get_gpuTopology();
-    }
-    if (nvmon_initialized == 0)
-    {
-        ret = nvmon_init(nrGpus, gpus);
-        if (ret != 0)
-        {
-            lua_pushstring(L,"Cannot initialize likwid perfmon");
-            nvmon_finalize();
-            lua_pushinteger(L,ret);
-            return 1;
-        }
-        nvmon_initialized = 1;
-        lua_pushinteger(L,ret);
-    }
-    return 1;
-}
-
-static int
-lua_likwid_nvAddEventSet(lua_State* L)
-{
-    int groupId, n;
-    const char* tmpString;
-    if (nvmon_initialized == 0)
-    {
-        return 0;
-    }
-    n = lua_gettop(L);
-    tmpString = luaL_checkstring(L, n);
-    luaL_argcheck(L, strlen(tmpString) > 0, n, "Event string must be larger than 0");
-
-    groupId = nvmon_addEventSet((char*)tmpString);
-    if (groupId >= 0)
-        lua_pushinteger(L, groupId+1);
-    else
-        lua_pushinteger(L, groupId);
-    return 1;
-}
-
-static int
-lua_likwid_nvFinalize(lua_State *L)
-{
-    if (nvmon_initialized)
-        nvmon_finalize();
-    return 0;
-}
-
-static int
-lua_likwid_nvSupported(lua_State *L)
-{
-    lua_pushboolean(L, 1);
-    return 1;
-}
-#else
-static int
-lua_likwid_nvSupported(lua_State *L)
-{
-    lua_pushboolean(L, 1);
-    return 0;
-}
-#endif /* LIKWID_WITH_NVMON */
 
 
 #ifdef LIKWID_WITH_ROCMON
@@ -3507,24 +3511,20 @@ GpuTopology_rocm_t gputopo_rocm = NULL;
 int gputopology_isInitialized_rocm = 0;
 
 static int
-lua_likwid_rocmSupported(lua_State *L)
-{
-    lua_pushboolean(L, TRUE);
-    return 1;
-}
-
-static int
 lua_likwid_getGpuTopology_rocm(lua_State* L)
 {
+    printf("Check if init'd");
     if (!gputopology_isInitialized_rocm)
     {
         if (topology_gpu_init_rocm() == EXIT_SUCCESS)
         {
+	    printf("Not init'd, retrieve information");
             gputopo_rocm = get_gpuTopology_rocm();
             gputopology_isInitialized_rocm = 1;
         }
         else
         {
+	    printf("GPU init'd");
             lua_pushnil(L);
             return 1;
         }
@@ -3535,6 +3535,7 @@ lua_likwid_getGpuTopology_rocm(lua_State* L)
     lua_pushstring(L,"numDevices");
     lua_pushinteger(L, (lua_Integer)(gputopo_rocm->numDevices));
     lua_settable(L,-3);
+    printf("Count of GPU: %i", gputopo_rocm->numDevices);
 
     lua_pushstring(L,"devices");
     lua_newtable(L);
@@ -3651,15 +3652,6 @@ lua_likwid_putGpuTopology_rocm(lua_State* L)
         topology_gpu_finalize_rocm();
     }
     return 0;
-}
-
-#else
-
-static int
-lua_likwid_rocmSupported(lua_State *L)
-{
-    lua_pushboolean(L, FALSE);
-    return 1;
 }
 
 #endif /* LIKWID_WITH_ROCMON */
@@ -3818,14 +3810,14 @@ luaopen_liblikwid(lua_State* L){
     lua_register(L, "likwid_seteuid", lua_likwid_seteuid);
     lua_register(L, "likwid_setresuid", lua_likwid_setresuid);
     lua_register(L, "likwid_setresuser", lua_likwid_setresuser);
-    // Nvidia GPU functions
-    lua_register(L, "likwid_nvSupported", lua_likwid_nvSupported);
-#ifdef LIKWID_WITH_NVMON
+    // GPU functions
+    lua_register(L, "likwid_gpuSupported", lua_likwid_gpuSupported);
     lua_register(L, "likwid_getGpuTopology", lua_likwid_getGpuTopology);
     lua_register(L, "likwid_putGpuTopology", lua_likwid_putGpuTopology);
     lua_register(L, "likwid_getGpuEventsAndCounters", lua_likwid_getGpuEventsAndCounters);
     lua_register(L, "likwid_getGpuGroups", lua_likwid_getGpuGroups);
     lua_register(L, "likwid_gpustr_to_gpulist", lua_likwid_gpustr_to_gpulist);
+#ifdef LIKWID_WITH_NVMON
     lua_register(L, "likwid_readNvMarkerFile", lua_likwid_nvMarkerFile_read);
     lua_register(L, "likwid_destroyNvMarkerFile", lua_likwid_nvMarkerFile_destroy);
     lua_register(L, "likwid_nvMarkerNumRegions", lua_likwid_nvMarkerNumRegions);
@@ -3848,7 +3840,6 @@ luaopen_liblikwid(lua_State* L){
     lua_register(L, "likwid_nvGetNameOfGroup",lua_likwid_nvGetNameOfGroup);
 #endif /* LIKWID_WITH_NVMON */
     // ROCm GPU functions
-    lua_register(L, "likwid_rocmSupported", lua_likwid_rocmSupported);
 #ifdef LIKWID_WITH_ROCMON
     lua_register(L, "likwid_getGpuTopology_rocm", lua_likwid_getGpuTopology_rocm);
     lua_register(L, "likwid_putGpuTopology_rocm", lua_likwid_putGpuTopology_rocm);

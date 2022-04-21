@@ -190,7 +190,7 @@ likwid.nvGetNameOfMetric = likwid_nvGetNameOfMetric
 likwid.nvGetNameOfEvent = likwid_nvGetNameOfEvent
 likwid.nvGetNameOfCounter = likwid_nvGetNameOfCounter
 
-likwid.nvSupported = likwid_nvSupported
+likwid.gpuSupported = likwid_gpuSupported
 likwid.readNvMarkerFile = likwid_readNvMarkerFile
 likwid.destroyNvMarkerFile = likwid_destroyNvMarkerFile
 likwid.nvMarkerNumRegions = likwid_nvMarkerNumRegions
@@ -208,7 +208,6 @@ likwid.nvInit = likwid_nvInit
 likwid.nvAddEventSet = likwid_nvAddEventSet
 likwid.nvFinalize = likwid_nvFinalize
 
-likwid.rocmSupported = likwid_rocmSupported
 likwid.getGpuTopology_rocm = likwid_getGpuTopology_rocm
 likwid.putGpuTopology_rocm = likwid_putGpuTopology_rocm
 

@@ -51,7 +51,7 @@ local function examples()
     io.stdout:write("likwid-perfctr -E L2\n")
     io.stdout:write("Run command on CPU 2 and measure performance group CLOCK:\n")
     io.stdout:write("likwid-perfctr -C 2 -g CLOCK ./a.out\n")
-    if likwid.nvSupported() then
+    if likwid.gpuSupported() then
         io.stdout:write("Run command and measure on GPU 1 the performance group FLOPS_DP (Only with NVMarkerAPI):\n")
         io.stdout:write("likwid-perfctr -G 1 -W FLOPS_DP -m ./a.out\n")
         io.stdout:write("It is possible to combine CPU and GPU measurements (with MarkerAPI and NVMarkerAPI):\n")
@@ -69,11 +69,11 @@ local function usage()
     io.stdout:write("-c <list>\t\t Processor ids to measure (required), e.g. 1,2-4,8\n")
     io.stdout:write("-C <list>\t\t Processor ids to pin threads and measure, e.g. 1,2-4,8\n")
     io.stdout:write("\t\t\t For information about the <list> syntax, see likwid-pin\n")
-    if likwid.nvSupported() then
+    if likwid.gpuSupported() then
         io.stdout:write("-G, --gpus <list>\t List of GPUs to monitor\n")
     end
     io.stdout:write("-g, --group <string>\t Performance group or custom event set string for CPU monitoring\n")
-    if likwid.nvSupported() then
+    if likwid.gpuSupported() then
         io.stdout:write("-W, --gpugroup <string>\t Performance group or custom event set string for GPU monitoring\n")
     end
     io.stdout:write("-H\t\t\t Get group help (together with -g switch)\n")
@@ -163,7 +163,7 @@ cpuinfo = nil
 
 
 ---------------------------
-gpusSupported = likwid.nvSupported()
+gpuSupport = likwid.gpuSupported()
 num_gpus = 0
 gpulist = {}
 gpu_event_string_list = {}
@@ -345,7 +345,7 @@ for opt,arg in likwid.getopt(arg, {"a", "c:", "C:", "e", "E:", "g:", "h", "H", "
     elseif (opt == "stats") then
         print_stats = true
 ---------------------------
-    elseif gpusSupported and (opt == "G") then
+    elseif gpuSupport and (opt == "G") then
         if arg ~= nil then
             num_gpus, gpulist = likwid.gpustr_to_gpulist(arg)
         else
@@ -353,7 +353,7 @@ for opt,arg in likwid.getopt(arg, {"a", "c:", "C:", "e", "E:", "g:", "h", "H", "
             perfctr_exit(1)
         end
         gotG = true
-    elseif gpusSupported and (opt == "W" or opt == "gpugroup") then
+    elseif gpuSupport and (opt == "W" or opt == "gpugroup") then
         if arg ~= nil then
             table.insert(gpu_event_string_list, arg)
         else
@@ -385,7 +385,7 @@ io.stdout:setvbuf("no")
 cpuinfo = likwid.getCpuInfo()
 cputopo = likwid.getCpuTopology()
 ---------------------------
-if gpusSupported then
+if gpuSupport then
     gputopo = likwid.getGpuTopology()
 end
 ---------------------------
@@ -417,7 +417,7 @@ elseif num_cpus == 0 and
 end
 
 ---------------------------
-if gpusSupported and
+if gpuSupport and
    num_gpus == 0 and
    not gotG and
    gputopo and
@@ -447,7 +447,7 @@ if num_cpus > 0 then
 end
 
 ---------------------------
-if gpusSupported and gputopo and num_gpus > 0 then
+if gpuSupport and gputopo and num_gpus > 0 then
     for i,gpu1 in pairs(gpulist) do
         for j, gpu2 in pairs(gpulist) do
             if i ~= j and gpu1 == gpu2 then
@@ -484,7 +484,7 @@ if print_events == true then
         print_stdout(outstr)
     end
 ---------------------------
-    if gpusSupported and gputopo then
+    if gpuSupport and gputopo then
         local cudahome = os.getenv("CUDA_HOME")
         if cudahome and cudahome:len() > 0 then
             ldpath = os.getenv("LD_LIBRARY_PATH")
@@ -492,6 +492,7 @@ if print_events == true then
             likwid.setenv("LD_LIBRARY_PATH", cuptilib..":"..ldpath)
         end
         tab = likwid.getGpuEventsAndCounters()
+	print_stdout(tab["numDevices"])
         for d=0,tab["numDevices"],1 do
             if tab["devices"][d] then
                 print_stdout("\n\n")
@@ -537,7 +538,7 @@ if print_event ~= nil then
         end
     end
 ---------------------------
-    if gpusSupported and gputopo then
+    if gpuSupport and gputopo then
         local cudahome = os.getenv("CUDA_HOME")
         if cudahome and cudahome:len() > 0 then
             ldpath = os.getenv("LD_LIBRARY_PATH")
@@ -599,7 +600,7 @@ if print_groups == true then
             if g["Name"]:len() > max_len then max_len = g["Name"]:len() end
         end
         local s = string.format("%%%ds\t%%s", max_len)
-        if gpusSupported and gputopo then
+        if gpuSupport and gputopo then
             print_stdout(string.format(s,"PerfMon group name", "Description"))
         else
             print_stdout(string.format(s,"Group name", "Description"))
@@ -611,7 +612,7 @@ if print_groups == true then
     else
         print_stdout(string.format("No groups defined for %s",cpuinfo["name"]))
     end
-    if gpusSupported and gputopo then
+    if gpuSupport and gputopo then
         avail_groups = likwid.getGpuGroups(0)
         if avail_groups then
             local max_len = 0
@@ -686,7 +687,7 @@ if print_info or verbose > 0 then
         print_stdout(string.format("PERFMON width of counters:\t\t%u",cpuinfo["perf_width_ctr"]))
         print_stdout(string.format("PERFMON number of fixed counters:\t%u",cpuinfo["perf_num_fixed_ctr"]))
     end
-    if gpusSupported and gputopo then
+    if gpuSupport and gputopo then
         print_stdout(likwid.hline)
         for i=1, gputopo["numDevices"] do
             gpu = gputopo["devices"][i]
@@ -728,7 +729,7 @@ if use_marker then
         print_stderr(string.format("Please purge all MarkerAPI files from %s.", markerFolder))
         perfctr_exit(1)
     end
-    if gpusSupported and #gpulist and likwid.access(nvMarkerFile, "rw") ~= -1 then
+    if gpuSupport and #gpulist and likwid.access(nvMarkerFile, "rw") ~= -1 then
         print_stderr(string.format("ERROR: GPUMarkerAPI file %s not accessible. Maybe a remaining file of another user.", nvMarkerFile))
         print_stderr(string.format("Please purge all GPUMarkerAPI files from %s.", markerFolder))
         perfctr_exit(1)
@@ -803,7 +804,7 @@ if use_marker == true then
     likwid.setenv("LIKWID_THREADS", table.concat(cpulist,","))
     likwid.setenv("LIKWID_FORCE", "-1")
     likwid.setenv("KMP_INIT_AT_FORK", "FALSE")
-    if gpusSupported and #gpulist > 0 and #gpu_event_string_list > 0 then
+    if gpuSupport and #gpulist > 0 and #gpu_event_string_list > 0 then
         likwid.setenv("LIKWID_GPUS", table.concat(gpulist,","))
         str = table.concat(gpu_event_string_list, "|")
         likwid.setenv("LIKWID_GEVENTS", str)
@@ -841,7 +842,7 @@ if #event_string_list > 0 then
     end
 end
 ---------------------------
-if gpusSupported and #gpu_event_string_list > 0 then
+if gpuSupport and #gpu_event_string_list > 0 then
     if likwid.nvInit(num_gpus, gpulist) < 0 then
         perfctr_exit(1)
     end
@@ -859,7 +860,7 @@ elseif not ldpath:match(libpath) then
     likwid.setenv("LD_LIBRARY_PATH", libpath..":"..ldpath)
 end
 ---------------------------
-if gpusSupported then
+if gpuSupport then
     local cudahome = os.getenv("CUDA_HOME")
     if cudahome then
         ldpath = os.getenv("LD_LIBRARY_PATH")
@@ -914,7 +915,7 @@ for i, event_string in pairs(event_string_list) do
         table.insert(group_ids, gid)
     end
 end
-if gpusSupported then
+if gpuSupport then
     for i, event_string in pairs(gpu_event_string_list) do
         if event_string:len() > 0 then
             local gid = likwid.nvAddEventSet(event_string)
@@ -944,7 +945,7 @@ if #event_string_list > 0 then
     end
 end
 
-if gpusSupported and #gpu_event_string_list > 0 then
+if gpuSupport and #gpu_event_string_list > 0 then
     activeNvGroup = gpugroups[1]
     if outfile == nil then
         print_stdout(likwid.hline)
