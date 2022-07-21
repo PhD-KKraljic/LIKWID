@@ -60,24 +60,62 @@ inline void gpuAssert(hipError_t code, const char *file, int line,
 using namespace std;
 
 template <typename T>
-__global__ void init_kernel(T *A, const T *__restrict__ B,
-                            const T *__restrict__ C, const T *__restrict__ D,
-                            const size_t N) {
-  int tidx = threadIdx.x + blockIdx.x * blockDim.x;
-  for (size_t i = tidx; i < N; i += blockDim.x * gridDim.x) {
-    A[i] = 0.1;
-  }
+__global__ void init_kernel(T *A, const double value, const size_t N) {
+    int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+    for (size_t i = tidx; i < N; i += blockDim.x * gridDim.x) {
+        A[i] = value;
+    }
 }
 
 template <typename T>
-__global__ void sch_triad_kernel(T *A, const T *__restrict__ B,
-                                 const T *__restrict__ C,
-                                 const T *__restrict__ D, const int64_t N) {
-  int tidx = threadIdx.x + blockIdx.x * blockDim.x;
-  for (int64_t i = tidx; i < N; i += blockDim.x * gridDim.x) {
-    A[i] = B[i] + C[i] * D[i];
-  }
+__global__ void stream_copy_kernel(const T *__restrict__ A,
+                                  T *C,
+                                  const int64_t N) {
+    int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+    for (int64_t i = tidx; i < N; i += blockDim.x * gridDim.x) {
+        C[i] = A[i];
+    }
 }
+
+template <typename T>
+__global__ void stream_scale_kernel(T *B,
+                                  const T *__restrict__ C,
+                                  const T *__restrict__ scalar,
+                                  const int64_t N) {
+    int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+    for (int64_t i = tidx; i < N; i += blockDim.x * gridDim.x) {
+        B[i] = scalar[0] * C[i];
+    }
+}
+
+template <typename T>
+__global__ void stream_add_kernel(const T *__restrict__ A,
+                                const T *__restrict__ B,
+                                T *C,
+                                const int64_t N) {
+  int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+    for (int64_t i = tidx; i < N; i += blockDim.x * gridDim.x) {
+        C[i] = A[i] + B[i];
+    }
+}
+
+template <typename T>
+__global__ void stream_triad_kernel(T *A,
+                                 const T *__restrict__ B,
+                                 const T *__restrict__ C,
+                                 const T *__restrict__ scalar,
+                                 const int64_t N) {
+    int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+    for (int64_t i = tidx; i < N; i += blockDim.x * gridDim.x) {
+        A[i] = B[i] + scalar[0] * C[i];
+    }
+}
+
+#ifndef STREAM_TYPE
+#define STREAM_TYPE double
+#endif
+STREAM_TYPE *a, *b, *c, *scalar;
+char region_tag[80];
 
 int main(int argc, char **argv) {
   size_t buffer_size = 128 * 1024 * 1024;
@@ -87,26 +125,23 @@ int main(int argc, char **argv) {
   }
   cout << "Buffer size: " << buffer_size << endl;
 
-  double *dA, *dB, *dC, *dD;
-  
   // Get start time
   double tstart = dtime();
 
   // Marker init
   ROCMON_MARKER_INIT;
   ROCMON_MARKER_REGISTER("init");
-  ROCMON_MARKER_REGISTER("triad");
 
-  GPU_ERROR(hipMalloc(&dA, buffer_size * sizeof(double)));
-  GPU_ERROR(hipMalloc(&dB, buffer_size * sizeof(double)));
-  GPU_ERROR(hipMalloc(&dC, buffer_size * sizeof(double)));
-  GPU_ERROR(hipMalloc(&dD, buffer_size * sizeof(double)));
+  GPU_ERROR(hipMalloc(&a, buffer_size * sizeof(STREAM_TYPE)));
+  GPU_ERROR(hipMalloc(&b, buffer_size * sizeof(STREAM_TYPE)));
+  GPU_ERROR(hipMalloc(&c, buffer_size * sizeof(STREAM_TYPE)));
+  GPU_ERROR(hipMalloc(&scalar, sizeof(STREAM_TYPE)));
 
   ROCMON_MARKER_START("init");
-  hipLaunchKernelGGL((init_kernel<double>), dim3(256), dim3(400), 0, 0, dA, dA, dA, dA, buffer_size);
-  hipLaunchKernelGGL((init_kernel<double>), dim3(256), dim3(400), 0, 0, dB, dB, dB, dB, buffer_size);
-  hipLaunchKernelGGL((init_kernel<double>), dim3(256), dim3(400), 0, 0, dC, dC, dC, dC, buffer_size);
-  hipLaunchKernelGGL((init_kernel<double>), dim3(256), dim3(400), 0, 0, dD, dD, dD, dD, buffer_size);
+  hipLaunchKernelGGL((init_kernel<STREAM_TYPE>), dim3(256), dim3(400), 0, 0, a, 1.0, buffer_size);
+  hipLaunchKernelGGL((init_kernel<STREAM_TYPE>), dim3(256), dim3(400), 0, 0, b, 2.0, buffer_size);
+  hipLaunchKernelGGL((init_kernel<STREAM_TYPE>), dim3(256), dim3(400), 0, 0, c, 0.0, buffer_size);
+  hipLaunchKernelGGL((init_kernel<STREAM_TYPE>), dim3(256), dim3(400), 0, 0, scalar, 3.0, 1);
   ROCMON_MARKER_STOP("init");
 
   GPU_ERROR(hipDeviceSynchronize());
@@ -121,31 +156,48 @@ int main(int argc, char **argv) {
   int smCount = prop.multiProcessorCount;
   int maxActiveBlocks = 0;
   GPU_ERROR(hipOccupancyMaxActiveBlocksPerMultiprocessor(
-      &maxActiveBlocks, sch_triad_kernel<double>, block_size, 0));
+      &maxActiveBlocks, stream_triad_kernel<STREAM_TYPE>, block_size, 0));
 
   int max_blocks = maxActiveBlocks * smCount;
-
-  hipLaunchKernelGGL((sch_triad_kernel<double>), dim3(max_blocks), dim3(block_size), 0, 0, dA, dB, dC, dD, buffer_size);
+  cout << "GPU Mapping: " << endl;
+  cout << "Workgroups " << max_blocks << " consists of " << maxActiveBlocks << "(max active blocks per cu) * " << smCount << " (amount of Compute Units)" << endl;
+  cout << "Threads " << block_size << endl;
 
   GPU_ERROR(hipDeviceSynchronize());
   double t1 = dtime();
   for (int i = 0; i < iters; i++) {
-    ROCMON_MARKER_START("triad");
-    hipLaunchKernelGGL((sch_triad_kernel<double>), dim3(max_blocks), dim3(block_size), 0, 0, dA, dB, dC, dD, buffer_size);
-    ROCMON_MARKER_STOP("triad");
+    sprintf(region_tag, "copy-%ld", buffer_size);
+    ROCMON_MARKER_REGISTER(region_tag);
+    ROCMON_MARKER_START(region_tag);
+    hipLaunchKernelGGL((stream_copy_kernel<STREAM_TYPE>), dim3(max_blocks), dim3(block_size), 0, 0, a, c, buffer_size);
+    ROCMON_MARKER_STOP(region_tag);
+    sprintf(region_tag, "scale-%ld", buffer_size);
+    ROCMON_MARKER_REGISTER(region_tag);
+    ROCMON_MARKER_START(region_tag);
+    hipLaunchKernelGGL((stream_scale_kernel<STREAM_TYPE>), dim3(max_blocks), dim3(block_size), 0, 0, b, c, scalar, buffer_size);
+    ROCMON_MARKER_STOP(region_tag);
+    sprintf(region_tag, "sum-%ld", buffer_size);
+    ROCMON_MARKER_REGISTER(region_tag);
+    ROCMON_MARKER_START(region_tag);
+    hipLaunchKernelGGL((stream_add_kernel<STREAM_TYPE>), dim3(max_blocks), dim3(block_size), 0, 0, a, b, c, buffer_size);
+    ROCMON_MARKER_STOP(region_tag);
+    sprintf(region_tag, "triad-%ld", buffer_size);
+    ROCMON_MARKER_REGISTER(region_tag);
+    ROCMON_MARKER_START(region_tag);
+    hipLaunchKernelGGL((stream_triad_kernel<STREAM_TYPE>), dim3(max_blocks), dim3(block_size), 0, 0, a, b, c, scalar, buffer_size);
+    ROCMON_MARKER_STOP(region_tag);
   }
   GPU_ERROR(hipGetLastError());
   GPU_ERROR(hipDeviceSynchronize());
-
   double t2 = dtime();
 
   // Marker stop
   ROCMON_MARKER_CLOSE;
 
-  GPU_ERROR(hipFree(dA));
-  GPU_ERROR(hipFree(dB));
-  GPU_ERROR(hipFree(dC));
-  GPU_ERROR(hipFree(dD));
+  GPU_ERROR(hipFree(a));
+  GPU_ERROR(hipFree(b));
+  GPU_ERROR(hipFree(c));
+  GPU_ERROR(hipFree(scalar));
 
   // Get start time
   double tstop = dtime();

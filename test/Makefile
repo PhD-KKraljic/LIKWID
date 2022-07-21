@@ -5,6 +5,24 @@ LIKWID_INC ?= -I$(PREFIX)/include
 LIKWID_DEFINES ?= -DLIKWID_PERFMON
 HIPCC ?= $(ROCM_HOME)/hip/bin/hipcc
 
+ifeq (,$(ROCBLAS_PATH))
+        ROCBLAS_PATH= $(wildcard /opt/rocm/rocblas)
+endif
+
+COMMON_PATH = ../../../rocBLAS/rocBLAS-Examples/common
+SOURCES = $(wildcard *.cpp) $(wildcard $(COMMON_PATH)/*.cpp)
+OBJECTS = $(patsubst %.cpp, %.o, $(SOURCES))
+
+OPT = -g -Ofast -march=native -Wall
+LIKWID_INC_AND_LIBS = $(LIKWID_INC) $(LIKWID_DEFINES) $(LIKWID_LIB) -DLIKWID_WITH_ROCMON -DLIKWID_ROCMON
+ROCBLAS_INC=  -I$(COMMON_PATH) -isystem$(HIP_PATH)/include -I$(ROCBLAS_PATH)/include -isystem$(ROCM_PATH)/include
+CXXFLAGS = -std=c++14 $(LIKWID_INC_AND_LIBS) $(ROCBLAS_INC) $(OPT)
+
+LDFLAGS=-L$(ROCBLAS_PATH)/lib -lrocblas -Wl,-rpath=$(ROCBLAS_PATH)/lib -L$(ROCM_PATH)/lib -lm -lpthread -lstdc++
+ifneq ($(CXX),$(HIPCXX))
+	LDFLAGS += -L$(HIP_PATH)/lib -lamdhip64 -Wl,-rpath=$(HIP_PATH)/lib
+endif
+
 all:  targets
 
 GCC_C11_SUPPORT_MAJOR=$(shell /bin/bash -c "g++ -v 2>&1 | grep -o -E '([0-9])\.' | head -n 1 | tr -d '[:punct:]'")
@@ -64,7 +82,10 @@ test-rocmon-triad: test-rocmon-triad.cpp
 	$(HIPCC) -O3 -std=c++11 $(LIKWID_INC) $(LIKWID_DEFINES) $(LIKWID_LIB) -I$(RSMIINCLUDE) -L$(ROCM_HOME)/rocm_smi/lib -lrocm_smi64 -DLIKWID_WITH_ROCMON test-rocmon-triad.cpp -o $@ -lm -llikwid
 
 test-rocmon-triad-marker: test-rocmon-triad-marker.cpp
-	$(HIPCC) -O3 -std=c++11 $(LIKWID_INC) $(LIKWID_DEFINES) $(LIKWID_LIB) -DLIKWID_WITH_ROCMON -DLIKWID_ROCMON test-rocmon-triad-marker.cpp -o $@ -lm -llikwid
+	$(HIPCC) -O3 -std=c++11  $(LIKWID_INC) $(LIKWID_DEFINES) $(LIKWID_LIB) -DLIKWID_WITH_ROCMON -DLIKWID_ROCMON -offload-arch=gfx906 -save-temps test-rocmon-triad-marker.cpp -o $@ -lm -llikwid
+
+test-rocblas-gemm-marker: test-rocblas-gemm-marker.cpp
+	$(HIPCC) -O3  $(CXXFLAGS) $(LDFLAGS) -save-temps test-rocblas-gemm-marker.cpp  -o $@ -lm -llikwid
 
 streamICC: stream.c
 	if [ $(ICC_AVAILABLE) -ne 0 ]; then icc -O3 -xHost -std=c99 -qopenmp $(LIKWID_INC) $(LIKWID_DEFINES) $(LIKWID_LIB) -o $@ stream.c -lm -llikwid; fi
