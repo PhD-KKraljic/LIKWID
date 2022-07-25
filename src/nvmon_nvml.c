@@ -947,7 +947,7 @@ nvml_init()
 
     // Init NVML
     NVML_CALL(nvmlInit_v2, (), return -1);
-
+    printf("Number of devices in init: %i\n", nvmlContext.numDevices);
     // Do device specific setup
     for (int i = 0; i < nvmlContext.numDevices; i++)
     {
@@ -1076,9 +1076,12 @@ nvml_getEventsOfGpu(int gpuId, NvmonEventList_t* output)
 {
     int gpuIdx = -1;
 
+    printf("NumDevices: %i \n", nvmlContext.numDevices);
+
     // Find index with given gpuId
     for (int i = 0; i < nvmlContext.numDevices; i++)
     {
+        printf("Looking for index with gpuId: %i \n", gpuId);
         if (nvmlContext.devices[i].nvDevice->deviceId == gpuId)
         {
             gpuIdx = i;
@@ -1087,6 +1090,7 @@ nvml_getEventsOfGpu(int gpuId, NvmonEventList_t* output)
     }
     if (gpuIdx < 0)
     {
+        ERROR_PLAIN_PRINT(Received invalid gpuIdx);
         return -EINVAL;
     }
 
@@ -1115,6 +1119,7 @@ nvml_getEventsOfGpu(int gpuId, NvmonEventList_t* output)
         NvmonEventListEntry* entry = &entries[i];
         int len;
 
+        printf("Adding event: %s \n", event->name);
         entry->name = event->name;
         entry->desc = "No description"; // TODO: Add event descriptions
         entry->limit = "GPU";

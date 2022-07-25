@@ -484,7 +484,7 @@ if print_events == true then
         print_stdout(outstr)
     end
 ---------------------------
-    if gpusSupported and gputopo then
+    if gpusSupported and gputopo and gputopo["numDevices"] > 0 then
         local cudahome = os.getenv("CUDA_HOME")
         if cudahome and cudahome:len() > 0 then
             ldpath = os.getenv("LD_LIBRARY_PATH")
@@ -492,8 +492,9 @@ if print_events == true then
             likwid.setenv("LD_LIBRARY_PATH", cuptilib..":"..ldpath)
         end
         tab = likwid.getGpuEventsAndCounters()
-        for d=0,tab["numDevices"],1 do
-            if tab["devices"][d] then
+        print_stdout(string.format("%d", gputopo["numDevices"]))
+        for d=0,gputopo["numDevices"],1 do
+            if gputopo["devices"][d] then
                 print_stdout("\n\n")
                 print_stdout(string.format("The GPUs %d provides %d events.", d, #tab["devices"][d]))
                 print_stdout("You can use as many GPUx counters until you get an error.")
@@ -546,7 +547,7 @@ if print_event ~= nil then
         end
         if cudahome then
             tab = likwid.getGpuEventsAndCounters()
-            for d=0,tab["numDevices"]-1,1 do
+            for d=0,gpuTopo["numDevices"]-1,1 do
                 for _,e in pairs(tab["devices"][d]) do
                     if e["Name"]:match(case_insensitive_pattern(print_event)) then
                         local f = false

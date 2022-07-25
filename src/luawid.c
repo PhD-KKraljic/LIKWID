@@ -3105,6 +3105,9 @@ lua_likwid_gpustr_to_gpulist(lua_State* L)
 static int
 lua_likwid_getGpuEventsAndCounters(lua_State* L)
 {
+
+    printf("Gpu Topo init state: %i\n", gputopology_isInitialized);
+    printf("Number of devices: %i \n", gputopo->numDevices);
     if (!gputopology_isInitialized)
     {
         if (topology_gpu_init() == EXIT_SUCCESS)
@@ -3128,12 +3131,15 @@ lua_likwid_getGpuEventsAndCounters(lua_State* L)
     lua_newtable(L);
     for (int i = 0; i < gputopo->numDevices; i++)
     {
+        printf("NUmber of Devices inside loop is: %i\n", gputopo->numDevices);
+        printf("Iteration NUmber: %i\n", i);
         NvmonEventList_t l;
         GpuDevice* gpu = &gputopo->devices[i];
         lua_pushinteger(L, gpu->devid);
         lua_newtable(L);
 
         int ret = nvmon_getEventsOfGpu(gpu->devid, &l);
+        printf("Got Return value: %i \n", ret);
         if (ret == 0)
         {
             for (int j = 0; j < l->numEvents; j++)

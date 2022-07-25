@@ -92,6 +92,7 @@ nvmon_init(int nrGpus, const int* gpuIds)
         return 0;
     }
 
+    printf("nrGpus: %i \n", nrGpus);
     if (nrGpus <= 0)
     {
         ERROR_PRINT(Number of gpus must be greater than 0 but only %d given, nrGpus);
@@ -310,6 +311,7 @@ nvmon_getEventsOfGpu(int gpuId, NvmonEventList_t* list)
     int ret = topology_gpu_init();
     if (ret != EXIT_SUCCESS)
     {
+        printf("Received error value ENODEV: -%i \n", ENODEV);
         return -ENODEV;
     }
     GpuTopology_t gtopo = get_gpuTopology();
@@ -324,6 +326,7 @@ nvmon_getEventsOfGpu(int gpuId, NvmonEventList_t* list)
     }
     if (available < 0)
     {
+        printf("Received error value EINVAL: -%i \n", EINVAL);
         return -EINVAL;
     }
 
@@ -346,8 +349,8 @@ nvmon_getEventsOfGpu(int gpuId, NvmonEventList_t* list)
     // Get nvml events and merge lists
     NvmonEventList_t nvmlList = NULL;
     err = nvml_getEventsOfGpu(gpuId, &nvmlList);
-    if (err < 0)
-    {
+    if (err < 0) {
+        ERROR_PLAIN_PRINT(Failed to receive Events of GPU);
         nvmon_returnEventsOfGpu(*list);
         *list = NULL;
         return err;
@@ -361,6 +364,7 @@ nvmon_getEventsOfGpu(int gpuId, NvmonEventList_t* list)
         *list = NULL;
         return err;
     }
+
     nvml_returnEventsOfGpu(nvmlList);
 
     return 0;
